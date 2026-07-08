@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>서울 건축 답사 지도</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #9a9a9a;
+    --line: #e6e6e4;
+    --visited: #2b3a55;   /* 짙은 남색 - 답사 완료 */
+    --unvisited: #f1f0ee; /* 옅은 회백 - 미답사 */
+    --unvisited-line: #d8d6d2;
+    --accent: #c65d3b;    /* 테라코타 포인트 */
+    --font: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo",
+            "Malgun Gothic", "Noto Sans KR", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    padding: 32px 20px 60px;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  header {
+    margin-bottom: 22px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .sub {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    margin: 18px 0 20px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .dot.v { background: var(--visited); }
+  .dot.u { background: var(--unvisited); border: 1px solid var(--unvisited-line); }
+
+  svg { width: 100%; height: auto; display: block; }
+
+  .gu {
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+    transform-origin: center;
+  }
+
+  .gu:hover { opacity: 0.85; }
+
+  .gu-label {
+    font-size: 11px;
+    font-weight: 600;
+    fill: var(--ink);
+    pointer-events: none;
+  }
+
+  .gu-label.on-dark { fill: #ffffff; }
+
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--ink);
+    color: #fff;
+    font-size: 12px;
+    padding: 8px 11px;
+    border-radius: 6px;
+    line-height: 1.4;
+    max-width: 220px;
+    opacity: 0;
+    transform: translate(-50%, -110%);
+    transition: opacity 0.1s ease;
+    z-index: 10;
+  }
+
+  .tooltip strong { display: block; margin-bottom: 2px; font-size: 12.5px; }
+  .tooltip .status { color: #b9c2d6; font-size: 11px; }
+
+  footer {
+    margin-top: 26px;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.6;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Architecture Fieldwork Log</div>
+    <h1>서울 건축 답사 지도</h1>
+    <div class="sub">구를 클릭하면 해당 구의 노션 페이지로 이동합니다. (마우스를 올리면 미리보기가 뜹니다)</div>
+  </header>
+
+  <div class="legend">
+    <span><i class="dot v"></i>답사 완료</span>
+    <span><i class="dot u"></i>미답사</span>
+  </div>
+
+  <svg id="map" viewBox="0 0 720 620" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <footer>
+    ※ 실제 행정구역 경계가 아닌, 위치 관계를 단순화한 개략도(schematic map)입니다.<br/>
+    ※ 각 구의 링크와 답사 여부는 하단 스크립트의 DISTRICTS 데이터에서 직접 수정하세요.
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+/* ------------------------------------------------------------------
+   여기를 수정하세요.
+   - notionUrl: 해당 구의 노션 페이지 주소 (없으면 "" 로 두면 알림만 뜸)
+   - visited: true / false
+   - note: 툴팁에 짧게 뜰 메모 (답사일, 대상 건축물 등)
+------------------------------------------------------------------- */
+const DISTRICTS = {
+  "도봉구": { col: 3, row: 0, notionUrl: "", visited: false, note: "" },
+  "노원구": { col: 4, row: 0, notionUrl: "", visited: false, note: "" },
+
+  "은평구": { col: 1, row: 1, notionUrl: "", visited: false, note: "" },
+  "강북구": { col: 3, row: 1, notionUrl: "", visited: false, note: "" },
+  "성북구": { col: 4, row: 1, notionUrl: "", visited: false, note: "" },
+  "중랑구": { col: 5, row: 1, notionUrl: "", visited: false, note: "" },
+
+  "서대문구": { col: 1, row: 2, notionUrl: "", visited: false, note: "" },
+  "종로구":   { col: 3, row: 2, notionUrl: "", visited: false, note: "" },
+  "동대문구": { col: 5, row: 2, notionUrl: "", visited: false, note: "" },
+
+  "마포구": { col: 1, row: 3, notionUrl: "", visited: false, note: "" },
+  "중구":   { col: 3, row: 3, notionUrl: "", visited: true,  note: "MMCA 서울관 답사 예정 · 사례 분석 완료" },
+  "성동구": { col: 4, row: 3, notionUrl: "", visited: false, note: "" },
+  "광진구": { col: 5, row: 3, notionUrl: "", visited: false, note: "" },
+
+  "용산구": { col: 2, row: 4, notionUrl: "", visited: false, note: "" },
+
+  "강서구":   { col: 0, row: 5, notionUrl: "", visited: false, note: "" },
+  "양천구":   { col: 1, row: 5, notionUrl: "", visited: false, note: "" },
+  "구로구":   { col: 1, row: 6, notionUrl: "", visited: false, note: "" },
+  "금천구":   { col: 2, row: 6, notionUrl: "", visited: false, note: "" },
+  "영등포구": { col: 2, row: 5, notionUrl: "", visited: false, note: "" },
+  "동작구":   { col: 3, row: 5, notionUrl: "", visited: false, note: "" },
+  "관악구":   { col: 3, row: 6, notionUrl: "", visited: false, note: "" },
+  "서초구":   { col: 4, row: 5, notionUrl: "", visited: false, note: "" },
+  "강남구":   { col: 5, row: 5, notionUrl: "", visited: false, note: "" },
+  "송파구":   { col: 6, row: 5, notionUrl: "", visited: false, note: "" },
+  "강동구":   { col: 7, row: 5, notionUrl: "", visited: false, note: "" },
+};
+
+const CELL_W = 92, CELL_H = 78, GAP = 6, PAD_X = 14, PAD_Y = 14;
+
+const svg = document.getElementById("map");
+const tooltip = document.getElementById("tooltip");
+const ns = "http://www.w3.org/2000/svg";
+
+Object.entries(DISTRICTS).forEach(([name, d]) => {
+  const x = PAD_X + d.col * (CELL_W + GAP);
+  const y = PAD_Y + d.row * (CELL_H + GAP);
+
+  const g = document.createElementNS(ns, "g");
+  g.setAttribute("class", "gu");
+  g.setAttribute("data-name", name);
+
+  const rect = document.createElementNS(ns, "rect");
+  rect.setAttribute("x", x);
+  rect.setAttribute("y", y);
+  rect.setAttribute("width", CELL_W);
+  rect.setAttribute("height", CELL_H);
+  rect.setAttribute("rx", 8);
+  rect.setAttribute("fill", d.visited ? "var(--visited)" : "var(--unvisited)");
+  rect.setAttribute("stroke", d.visited ? "var(--visited)" : "var(--unvisited-line)");
+  rect.setAttribute("stroke-width", "1");
+  g.appendChild(rect);
+
+  const label = document.createElementNS(ns, "text");
+  label.setAttribute("x", x + CELL_W / 2);
+  label.setAttribute("y", y + CELL_H / 2 + 4);
+  label.setAttribute("text-anchor", "middle");
+  label.setAttribute("class", "gu-label" + (d.visited ? " on-dark" : ""));
+  label.textContent = name;
+  g.appendChild(label);
+
+  g.addEventListener("mousemove", (e) => {
+    tooltip.style.left = e.clientX + "px";
+    tooltip.style.top = e.clientY + "px";
+    tooltip.style.opacity = 1;
+    tooltip.innerHTML =
+      "<strong>" + name + "</strong>" +
+      "<span class='status'>" + (d.visited ? "답사 완료" : "미답사") + "</span>" +
+      (d.note ? "<div>" + d.note + "</div>" : "");
+  });
+
+  g.addEventListener("mouseleave", () => {
+    tooltip.style.opacity = 0;
+  });
+
+  g.addEventListener("click", () => {
+    if (d.notionUrl) {
+      window.open(d.notionUrl, "_blank");
+    } else {
+      alert(name + "\n\n아직 연결된 노션 페이지 링크가 없습니다.\n스크립트의 DISTRICTS 데이터에서 notionUrl을 채워주세요.");
+    }
+  });
+
+  svg.appendChild(g);
+});
+</script>
+</body>
+</html>
